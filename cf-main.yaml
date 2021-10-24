@@ -3,7 +3,7 @@ Parameters:
   InstanceTypeParameter:
     Type: String
     Default: t3.micro
-    Description: Enter instance size. Default is t3.micro (free tier in eu-north-1 (Stockholm))
+    Description: Choose instance type- Default is t3.micro (free tier in eu-north-1 (Stockholm))
   WorkstationIp:
     Type: String
     Description: The IP address of the workstation that can SSH into the instance e.g. check from https://www.ripe.net/
@@ -124,5 +124,5 @@ Outputs:
     Value:
       Fn::GetAtt:
         - Linux
-        - PublicIp
-    Description: Server's PublicIp Address
+        - PublicIpAddress
+    Description: Minecraft Bedrock Server's public ip address
