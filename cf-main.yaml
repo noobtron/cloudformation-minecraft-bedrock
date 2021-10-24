@@ -1,0 +1,127 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  InstanceTypeParameter:
+    Type: String
+    Default: t2.micro
+    Description: Enter instance size. Default is t2.micro.
+  WorkstationIp:
+    Type: String
+    Description: The IP address of the workstation that can SSH into the instance.
+  AMI:
+    Type: String
+    Default: ami-05cd35b907b4ffe77
+    Description: The Linux AMI to use.
+  Key:
+    Type: String
+    Description: The key used to access the instance.
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: default
+      Tags:
+        - Key: Name
+          Value: Minecraft VPC
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+  SubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: eu-west-1a
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.0.0/24
+      MapPublicIpOnLaunch: true
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+  InternetRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGateway
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref RouteTable
+  SubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTable
+      SubnetId: !Ref SubnetA
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "Internet Group"
+      GroupDescription: "SSH from workstation and UDP 19132 for Minecraft from internet, all traffic out."
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: udp
+          FromPort: '19132'
+          ToPort: '19132'
+          CidrIp:  0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp:  !Sub ${WorkstationIp}/32
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+  ElasticIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      InstanceId: !Ref Linux
+  Linux:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      SubnetId: !Ref SubnetA
+      ImageId: !Ref AMI
+      InstanceType:
+        Ref: InstanceTypeParameter
+      KeyName: !Ref Key
+      SecurityGroupIds:
+        - Ref: InstanceSecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 40
+      Tags:
+        -
+          Key: Application
+          Value: Minecraft Bedrock Linux Server
+        -
+          Key: LifeTime
+          Value: Spot
+        -
+          Key: Name
+          Value: Minecraft Bedrock Linux Server
+        -
+          Key: OS
+          Value: Amazon Linux 2 AMI
+  Shutdownschedule:
+    Type: 'Custom::ServiceInstanceSchedule'
+    Properties:
+      Name: Shutdown-Schedule-at-21-Helsinki
+      NoStackPrefix: 'True'
+      Description: Shutdown server at 21:00 Helsinki time if still running
+      ServiceToken: >-
+        arn:aws:lambda:[Region]:[AccountId]:function:[stackName]-InstanceSchedulerMain
+      Timezone: Europe/Helsinki
+      Periods:
+        - Description: Opening hours on weekdays
+          EndTime: '21:00'
+          WeekDays: Mon-Sun
+Outputs:
+  PublicIp:
+    Value:
+      Fn::GetAtt:
+        - Linux
+        - PublicIp
+    Description: Server's PublicIp Address
