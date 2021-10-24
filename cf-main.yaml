@@ -2,18 +2,26 @@ AWSTemplateFormatVersion: 2010-09-09
 Parameters:
   InstanceTypeParameter:
     Type: String
-    Default: t2.micro
-    Description: Enter instance size. Default is t2.micro.
+    Default: t3.micro
+    Description: Enter instance size. Default is t3.micro (free tier in eu-north-1 (Stockholm))
   WorkstationIp:
     Type: String
-    Description: The IP address of the workstation that can SSH into the instance.
-  AMI:
-    Type: String
-    Default: ami-05cd35b907b4ffe77
-    Description: The Linux AMI to use.
+    Description: The IP address of the workstation that can SSH into the instance e.g. check from https://www.ripe.net/
   Key:
     Type: String
     Description: The key used to access the instance.
+Mappings:
+  RegionSelection:
+    eu-west-1:
+      AMI: ami-05cd35b907b4ffe77
+    eu-central-11:
+      AMI: ami-058e6df85cfc7760b
+    eu-west-2:
+      AMI: ami-02f5781cba46a5e8a
+    eu-west-3:
+      AMI: ami-0eb34a1ff6bafc83f
+    eu-north-1:
+      AMI: ami-0d15082500b576303
 Resources:
   VPC:
     Type: AWS::EC2::VPC
@@ -35,7 +43,7 @@ Resources:
   SubnetA:
     Type: AWS::EC2::Subnet
     Properties:
-      AvailabilityZone: eu-west-1a
+      AvailabilityZone: !Sub ${AWS::Region}b
       VpcId: !Ref VPC
       CidrBlock: 10.0.0.0/24
       MapPublicIpOnLaunch: true
@@ -82,7 +90,7 @@ Resources:
     Type: 'AWS::EC2::Instance'
     Properties:
       SubnetId: !Ref SubnetA
-      ImageId: !Ref AMI
+      ImageId: !FindInMap [RegionSelection, !Ref 'AWS::Region', AMI]
       InstanceType:
         Ref: InstanceTypeParameter
       KeyName: !Ref Key
@@ -91,33 +99,26 @@ Resources:
       BlockDeviceMappings:
         - DeviceName: /dev/xvda
           Ebs:
-            VolumeSize: 40
+            VolumeSize: 30
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -ex
+          sudo yum update -y
+          sudo amazon-linux-extras install docker
+          sudo service docker start
+          sudo usermod -a -G docker ec2-user
+          docker volume create mc-volume
+          docker run -d -it --name mc --restart unless-stopped -e EULA=TRUE -e SERVER_NAME=Mastercraft -p 19132:19132/udp -v mc-volume:/data itzg/minecraft-bedrock-server
       Tags:
         -
           Key: Application
           Value: Minecraft Bedrock Linux Server
-        -
-          Key: LifeTime
-          Value: Spot
         -
           Key: Name
           Value: Minecraft Bedrock Linux Server
         -
           Key: OS
           Value: Amazon Linux 2 AMI
-  Shutdownschedule:
-    Type: 'Custom::ServiceInstanceSchedule'
-    Properties:
-      Name: Shutdown-Schedule-at-21-Helsinki
-      NoStackPrefix: 'True'
-      Description: Shutdown server at 21:00 Helsinki time if still running
-      ServiceToken: >-
-        arn:aws:lambda:[Region]:[AccountId]:function:[stackName]-InstanceSchedulerMain
-      Timezone: Europe/Helsinki
-      Periods:
-        - Description: Opening hours on weekdays
-          EndTime: '21:00'
-          WeekDays: Mon-Sun
 Outputs:
   PublicIp:
     Value:
