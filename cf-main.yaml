@@ -124,5 +124,5 @@ Outputs:
     Value:
       Fn::GetAtt:
         - Linux
-        - PublicIpAddress
+        - "PublicIpAddress"
     Description: Minecraft Bedrock Server's public ip address
